@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#dc0a2d">
+<meta name="description" content="Pokédex Trainer — verzamel en vink Pokémon af.">
+<link rel="manifest" href="./manifest.json">
+<title>Pokédex Trainer</title>
+<style>
+:root{--red:#dc0a2d;--red2:#b70824;--dark:#101114;--card:#fff;--bg:#f3f4f7;--muted:#70757f;--green:#25a244}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--dark)}
+header{background:linear-gradient(135deg,#ef1639,#b80725);color:white;padding:18px 16px 16px;position:sticky;top:0;z-index:10;box-shadow:0 4px 14px #0002}
+.brand{display:flex;align-items:center;gap:12px}.ball{width:42px;height:42px;border-radius:50%;background:#fff;border:4px solid #111;position:relative;overflow:hidden;box-shadow:0 2px 5px #0004}.ball:before{content:"";position:absolute;left:-4px;right:-4px;top:16px;height:5px;background:#111}.ball:after{content:"";position:absolute;width:13px;height:13px;background:white;border:4px solid #111;border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%)}
+h1{font-size:22px;margin:0}.sub{font-size:12px;opacity:.85}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.stat{background:#ffffff1c;border:1px solid #ffffff30;border-radius:12px;padding:9px;text-align:center}.stat b{display:block;font-size:19px}.stat span{font-size:11px;opacity:.85}
+.progress{height:8px;background:#ffffff35;border-radius:10px;overflow:hidden;margin-top:10px}.progress i{display:block;height:100%;background:white;width:0;transition:.25s}
+main{max-width:1100px;margin:auto;padding:14px}.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.search{flex:1;min-width:190px;padding:13px 14px;border:1px solid #ddd;border-radius:13px;font-size:15px}.select,.btn{padding:12px;border:1px solid #ddd;border-radius:13px;background:white;font-weight:600}.btn.primary{background:var(--red);color:white;border-color:var(--red)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.card{background:var(--card);border-radius:17px;padding:10px;box-shadow:0 2px 10px #0000000b;border:2px solid transparent;position:relative;cursor:pointer}.card.caught{border-color:#25a244;background:#f1fff5}.pokeimg{width:100%;aspect-ratio:1;object-fit:contain;background:linear-gradient(145deg,#f7f8fa,#e9ebef);border-radius:13px}.num{font-size:11px;color:var(--muted);font-weight:700}.name{font-size:16px;font-weight:800;margin:2px 0 5px}.types{display:flex;gap:4px;flex-wrap:wrap}.type{font-size:10px;padding:3px 7px;border-radius:99px;background:#eee;color:#333}.check{position:absolute;right:10px;top:10px;width:30px;height:30px;border-radius:50%;background:#fff;border:1px solid #ddd;display:grid;place-items:center;font-size:16px}.caught .check{background:var(--green);color:white;border-color:var(--green)}
+.empty{text-align:center;padding:50px 10px;color:var(--muted)}footer{text-align:center;padding:25px;color:var(--muted);font-size:12px}
+@media(min-width:700px){.grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}}
+</style>
+</head>
+<body>
+<header>
+ <div class="brand"><div class="ball"></div><div><h1>Pokédex Trainer</h1><div class="sub">Jouw persoonlijke Pokédex</div></div></div>
+ <div class="stats">
+  <div class="stat"><b id="total">0</b><span>Totaal</span></div>
+  <div class="stat"><b id="caught">0</b><span>Afgevinkt</span></div>
+  <div class="stat"><b id="left">0</b><span>Nog te gaan</span></div>
+ </div>
+ <div class="progress"><i id="bar"></i></div>
+</header>
+<main>
+ <div class="tools">
+  <input id="search" class="search" placeholder="🔎 Zoek Pokémon of nummer..." autocomplete="off">
+  <select id="filter" class="select"><option value="all">Alle Pokémon</option><option value="caught">Afgevinkt</option><option value="left">Nog te gaan</option></select>
+  <select id="type" class="select"><option value="all">Alle types</option></select>
+  <button id="install" class="btn primary" hidden>📲 Installeer app</button>
+ </div>
+ <div id="grid" class="grid"></div>
+ <div id="empty" class="empty" hidden>Geen Pokémon gevonden.</div>
+</main>
+<footer>Je voortgang wordt automatisch op dit apparaat opgeslagen.</footer>
+<script>
+let data=[], caught=new Set(), deferredPrompt=null;
+const $=id=>document.getElementById(id);
+async function init(){
+  try{
+    const r=await fetch("./data/pokemon.json"); data=await r.json();
+    const saved=JSON.parse(localStorage.getItem("pokedex-caught")||"[]"); caught=new Set(saved.map(Number));
+    buildTypes(); render();
+  }catch(e){$("grid").innerHTML="<div class='empty'>De Pokémon-data kon niet worden geladen. Controleer of <b>data/pokemon.json</b> is geüpload.</div>";}
+}
+function buildTypes(){
+  const types=[...new Set(data.flatMap(p=>[p.type1,p.type2]).filter(Boolean))].sort();
+  $("type").innerHTML='<option value="all">Alle types</option>'+types.map(t=>`<option>${esc(t)}</option>`).join("");
+}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function render(){
+ const q=$("search").value.toLowerCase().trim(), f=$("filter").value, ty=$("type").value;
+ const list=data.filter(p=>{
+   const text=(p.name+" "+p.id+" "+p.pokedexId).toLowerCase();
+   return (!q||text.includes(q)) && (f==="all"||(f==="caught"&&caught.has(p.id))||(f==="left"&&!caught.has(p.id))) && (ty==="all"||p.type1===ty||p.type2===ty);
+ });
+ $("grid").innerHTML=list.map(card).join(""); $("empty").hidden=list.length>0; updateStats();
+}
+function card(p){
+ const done=caught.has(p.id);
+ const img=`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${p.id}.png`;
+ return `<article class="card ${done?"caught":""}" onclick="toggle(${p.id})">
+  <div class="check">${done?"✓":"+"}</div><img class="pokeimg" loading="lazy" src="${img}" alt="${esc(p.name)}">
+  <div class="num">#${String(p.id).padStart(4,"0")}</div><div class="name">${esc(p.name)}</div>
+  <div class="types">${[p.type1,p.type2].filter(Boolean).map(t=>`<span class="type">${esc(t)}</span>`).join("")}</div>
+ </article>`;
+}
+function toggle(id){caught.has(id)?caught.delete(id):caught.add(id);localStorage.setItem("pokedex-caught",JSON.stringify([...caught]));render()}
+function updateStats(){const total=data.length,c=caught.size;$("total").textContent=total;$("caught").textContent=c;$("left").textContent=total-c;$("bar").style.width=(total?c/total*100:0)+"%"}
+$("search").addEventListener("input",render);$("filter").addEventListener("change",render);$("type").addEventListener("change",render);
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredPrompt=e;$("install").hidden=false});
+$("install").addEventListener("click",async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;$("install").hidden=true});
+window.addEventListener("appinstalled",()=>{$("install").hidden=true});
+if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+init();
+</script>
+</body>
+</html>
